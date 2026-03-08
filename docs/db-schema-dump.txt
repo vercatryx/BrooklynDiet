@@ -1,0 +1,681 @@
+# Database schema dump (live Postgres – public schema only)
+# Generated: 2026-03-06T14:44:44.825Z
+
+Tables (47): _prisma_migrations, admins, app_settings, billing_records, box_quotas, box_types, breakfast_categories, breakfast_items, city_colors, client_box_orders, client_statuses, clients, delivery_history, driver_route_order, drivers, equipment, filled_forms, form_answers, form_submissions, forms, item_categories, meal_planner_custom_items, meal_planner_date_config, meal_planner_order_items, meal_planner_orders, menu_items, navigator_logs, navigators, nutritionists, order_box_selections, order_history, order_items, order_vendor_selections, orders, passwordless_codes, questions, route_runs, routes, schedules, settings, signatures, stops, upcoming_order_box_selections, upcoming_order_items, upcoming_order_vendor_selections, upcoming_orders, vendors
+
+## _prisma_migrations
+  id: varchar(36) NOT NULL PRIMARY KEY
+  checksum: varchar(64) NOT NULL
+  finished_at: timestamptz NULL
+  migration_name: varchar(255) NOT NULL
+  logs: text NULL
+  rolled_back_at: timestamptz NULL
+  started_at: timestamptz NOT NULL DEFAULT now()
+  applied_steps_count: int4(32,0) NOT NULL DEFAULT 0
+## admins
+  id: varchar(36) NOT NULL PRIMARY KEY
+  username: varchar(255) NOT NULL
+  password: varchar(255) NOT NULL
+  name: varchar(255) NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## app_settings
+  id: varchar(36) NOT NULL DEFAULT '1'::character varying PRIMARY KEY
+  weekly_cutoff_day: varchar(50) NULL DEFAULT 'Friday'::character varying
+  weekly_cutoff_time: varchar(50) NULL DEFAULT '17:00'::character varying
+  report_email: varchar(255) NULL
+  enable_passwordless_login: bool NULL DEFAULT false
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## billing_records
+  id: varchar(36) NOT NULL PRIMARY KEY
+  client_id: varchar(36) NOT NULL
+  order_id: varchar(36) NULL
+  status: varchar(50) NOT NULL
+  remarks: text NULL
+  navigator: varchar(255) NULL
+  amount: numeric(10,2) NOT NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## box_quotas
+  id: varchar(36) NOT NULL PRIMARY KEY
+  box_type_id: varchar(36) NOT NULL
+  category_id: varchar(36) NOT NULL
+  target_value: numeric(10,2) NOT NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## box_types
+  id: varchar(36) NOT NULL PRIMARY KEY
+  name: varchar(255) NOT NULL
+  vendor_id: varchar(36) NULL
+  is_active: bool NULL DEFAULT true
+  price_each: numeric(10,2) NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## breakfast_categories
+  id: varchar(36) NOT NULL DEFAULT (uuid_generate_v4())::text PRIMARY KEY
+  name: text NOT NULL
+  set_value: numeric(10,2) NULL
+  created_at: timestamptz NOT NULL DEFAULT timezone('utc'::text, now())
+  meal_type: text NOT NULL DEFAULT 'Breakfast'::text
+  sort_order: int4(32,0) NULL DEFAULT 0
+## breakfast_items
+  id: varchar(36) NOT NULL DEFAULT (uuid_generate_v4())::text PRIMARY KEY
+  category_id: varchar(36) NULL
+  name: text NOT NULL
+  quota_value: numeric(10,2) NULL DEFAULT 1
+  price_each: numeric(10,2) NULL
+  is_active: bool NULL DEFAULT true
+  created_at: timestamptz NOT NULL DEFAULT timezone('utc'::text, now())
+  sort_order: int4(32,0) NULL DEFAULT 0
+  image_url: text NULL
+## city_colors
+  id: varchar(36) NOT NULL PRIMARY KEY
+  city: varchar(100) NOT NULL
+  color: varchar(7) NOT NULL
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## client_box_orders
+  id: varchar(36) NOT NULL DEFAULT (uuid_generate_v4())::text PRIMARY KEY
+  client_id: varchar(36) NOT NULL
+  case_id: text NULL
+  box_type_id: varchar(36) NULL
+  vendor_id: varchar(36) NULL
+  quantity: int4(32,0) NULL DEFAULT 1
+  items: jsonb NULL DEFAULT '{}'::jsonb
+  created_at: timestamptz NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamptz NULL DEFAULT CURRENT_TIMESTAMP
+  item_notes: jsonb NULL DEFAULT '{}'::jsonb
+## client_statuses
+  id: varchar(36) NOT NULL PRIMARY KEY
+  name: varchar(255) NOT NULL
+  is_system_default: bool NULL DEFAULT false
+  deliveries_allowed: bool NULL DEFAULT true
+  requires_units_on_change: bool NULL DEFAULT false
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## clients
+  id: varchar(36) NOT NULL PRIMARY KEY
+  full_name: varchar(510) NOT NULL
+  first_name: varchar(510) NULL
+  last_name: varchar(510) NULL
+  email: varchar(510) NULL
+  address: text NULL
+  apt: varchar(100) NULL
+  city: varchar(200) NULL
+  state: varchar(4) NULL
+  zip: varchar(20) NULL
+  county: varchar(200) NULL
+  phone_number: varchar(510) NULL
+  secondary_phone_number: varchar(510) NULL
+  client_id_external: varchar(200) NULL
+  case_id_external: varchar(200) NULL
+  medicaid: bool NULL DEFAULT false
+  paused: bool NULL DEFAULT false
+  complex: bool NULL DEFAULT false
+  bill: bool NULL DEFAULT true
+  delivery: bool NULL DEFAULT true
+  dislikes: text NULL
+  latitude: float8(53) NULL
+  longitude: float8(53) NULL
+  lat: float8(53) NULL
+  lng: float8(53) NULL
+  geocoded_at: timestamp NULL
+  billings: jsonb NULL
+  visits: jsonb NULL
+  sign_token: varchar(510) NULL
+  navigator_id: varchar(36) NULL
+  end_date: date NULL
+  screening_took_place: bool NULL DEFAULT false
+  screening_signed: bool NULL DEFAULT false
+  screening_status: varchar(50) NULL DEFAULT 'not_started'::character varying
+  notes: text NULL
+  status_id: varchar(36) NULL
+  service_type: varchar(50) NOT NULL
+  approved_meals_per_week: int4(32,0) NULL
+  parent_client_id: varchar(36) NULL
+  dob: date NULL
+  cin: varchar(50) NULL
+  authorized_amount: numeric(10,2) NULL
+  expiration_date: date NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_by: varchar(510) NULL
+  assigned_driver_id: varchar(36) NULL
+  upcoming_order: jsonb NULL
+  meal_planner_data: jsonb NULL
+## delivery_history
+  id: varchar(36) NOT NULL PRIMARY KEY
+  client_id: varchar(36) NOT NULL
+  vendor_id: varchar(36) NOT NULL
+  service_type: varchar(50) NOT NULL
+  delivery_date: date NOT NULL
+  items_summary: text NULL
+  proof_of_delivery_image: varchar(500) NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## driver_route_order
+  driver_id: varchar(36) NOT NULL PRIMARY KEY
+  client_id: varchar(36) NOT NULL PRIMARY KEY
+  position: int4(32,0) NOT NULL
+## drivers
+  id: varchar(36) NOT NULL PRIMARY KEY
+  day: varchar(40) NOT NULL
+  name: varchar(510) NOT NULL
+  color: varchar(14) NULL
+  stop_ids: jsonb NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## equipment
+  id: varchar(36) NOT NULL PRIMARY KEY
+  name: varchar(255) NOT NULL
+  price: numeric(10,2) NOT NULL
+  vendor_id: varchar(36) NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## filled_forms
+  id: varchar(36) NOT NULL PRIMARY KEY
+  form_id: varchar(36) NOT NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## form_answers
+  id: varchar(36) NOT NULL PRIMARY KEY
+  filled_form_id: varchar(36) NOT NULL
+  question_id: varchar(36) NOT NULL
+  value: text NOT NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## form_submissions
+  id: varchar(36) NOT NULL PRIMARY KEY
+  form_id: varchar(36) NOT NULL
+  client_id: varchar(36) NULL
+  token: varchar(255) NOT NULL
+  status: varchar(50) NULL DEFAULT 'pending'::character varying
+  data: jsonb NULL
+  signature_url: varchar(500) NULL
+  pdf_url: varchar(500) NULL
+  comments: text NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## forms
+  id: varchar(36) NOT NULL PRIMARY KEY
+  title: varchar(255) NOT NULL
+  description: text NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## item_categories
+  id: varchar(36) NOT NULL PRIMARY KEY
+  name: varchar(255) NOT NULL
+  set_value: numeric(10,2) NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  meal_type: text NOT NULL DEFAULT 'Lunch'::text
+  sort_order: int4(32,0) NULL DEFAULT 0
+## meal_planner_custom_items
+  id: varchar(36) NOT NULL PRIMARY KEY
+  client_id: varchar(36) NULL
+  calendar_date: date NOT NULL
+  name: varchar(255) NOT NULL
+  quantity: int4(32,0) NOT NULL DEFAULT 1
+  sort_order: int4(32,0) NULL DEFAULT 0
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  expiration_date: date NULL
+  value: numeric(10,2) NULL
+  default_quantity: int4(32,0) NULL
+## meal_planner_date_config
+  id: varchar(36) NOT NULL PRIMARY KEY
+  calendar_date: date NOT NULL
+  client_id: varchar(36) NULL
+  expected_total_meals: int4(32,0) NULL
+## meal_planner_order_items
+  id: varchar(36) NOT NULL PRIMARY KEY
+  meal_planner_order_id: varchar(36) NOT NULL
+  meal_type: varchar(50) NOT NULL
+  menu_item_id: varchar(36) NULL
+  meal_item_id: varchar(36) NULL
+  quantity: int4(32,0) NOT NULL DEFAULT 1
+  notes: text NULL
+  custom_name: varchar(255) NULL
+  custom_price: numeric(10,2) NULL
+  sort_order: int4(32,0) NULL DEFAULT 0
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## meal_planner_orders
+  id: varchar(36) NOT NULL PRIMARY KEY
+  client_id: varchar(36) NOT NULL
+  status: varchar(50) NOT NULL DEFAULT 'draft'::character varying
+  scheduled_delivery_date: date NULL
+  delivery_day: varchar(50) NULL
+  total_value: numeric(10,2) NULL
+  total_items: int4(32,0) NULL
+  items: jsonb NULL
+  notes: text NULL
+  processed_order_id: varchar(36) NULL
+  processed_at: timestamp NULL
+  user_modified: bool NOT NULL DEFAULT false
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  case_id: varchar(255) NULL
+## menu_items
+  id: varchar(36) NOT NULL PRIMARY KEY
+  vendor_id: varchar(36) NULL
+  name: varchar(255) NOT NULL
+  value: numeric(10,2) NOT NULL
+  price_each: numeric(10,2) NULL
+  is_active: bool NULL DEFAULT true
+  category_id: varchar(36) NULL
+  quota_value: numeric(10,2) NULL
+  minimum_order: int4(32,0) NULL DEFAULT 0
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  image_url: text NULL
+  sort_order: int4(32,0) NULL DEFAULT 0
+## navigator_logs
+  id: varchar(36) NOT NULL PRIMARY KEY
+  navigator_id: varchar(36) NOT NULL
+  client_id: varchar(36) NOT NULL
+  action: varchar(255) NOT NULL
+  details: text NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## navigators
+  id: varchar(36) NOT NULL PRIMARY KEY
+  name: varchar(255) NOT NULL
+  email: varchar(255) NULL
+  password: varchar(255) NULL
+  is_active: bool NULL DEFAULT true
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## nutritionists
+  id: varchar(36) NOT NULL PRIMARY KEY
+  name: varchar(255) NOT NULL
+  email: varchar(255) NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## order_box_selections
+  id: varchar(36) NOT NULL PRIMARY KEY
+  order_id: varchar(36) NOT NULL
+  vendor_id: varchar(36) NOT NULL
+  box_type_id: varchar(36) NULL
+  quantity: int4(32,0) NOT NULL DEFAULT 1
+  items: jsonb NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## order_history
+  id: varchar(36) NOT NULL PRIMARY KEY
+  client_id: varchar(36) NOT NULL
+  who: varchar(255) NOT NULL
+  summary: text NOT NULL
+  timestamp: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## order_items
+  id: varchar(36) NOT NULL PRIMARY KEY
+  vendor_selection_id: varchar(36) NOT NULL
+  menu_item_id: varchar(36) NULL
+  quantity: int4(32,0) NOT NULL DEFAULT 1
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  custom_name: text NULL
+  custom_price: numeric(10,2) NULL
+  meal_item_id: varchar(36) NULL
+  notes: text NULL
+## order_vendor_selections
+  id: varchar(36) NOT NULL DEFAULT (uuid_generate_v4())::text PRIMARY KEY
+  order_id: varchar(36) NOT NULL
+  vendor_id: varchar(36) NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## orders
+  id: varchar(36) NOT NULL PRIMARY KEY
+  client_id: varchar(36) NOT NULL
+  service_type: varchar(50) NOT NULL
+  case_id: varchar(255) NULL
+  status: varchar(50) NOT NULL DEFAULT 'pending'::character varying
+  scheduled_delivery_date: date NULL
+  actual_delivery_date: date NULL
+  delivery_day: varchar(50) NULL
+  delivery_distribution: jsonb NULL
+  total_value: numeric(10,2) NULL
+  total_items: int4(32,0) NULL
+  notes: text NULL
+  proof_of_delivery_url: varchar(500) NULL
+  order_number: int4(32,0) NULL
+  last_updated: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_by: varchar(255) NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  bill_amount: numeric(10,2) NULL
+  vendor_id: varchar(36) NULL
+## passwordless_codes
+  id: varchar(36) NOT NULL PRIMARY KEY
+  email: varchar(255) NOT NULL
+  code: varchar(10) NOT NULL
+  expires_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  attempts: int4(32,0) NULL DEFAULT 0
+## questions
+  id: varchar(36) NOT NULL PRIMARY KEY
+  form_id: varchar(36) NOT NULL
+  text: text NOT NULL
+  type: varchar(50) NOT NULL
+  options: jsonb NULL
+  conditional_text_inputs: jsonb NULL
+  order: int4(32,0) NOT NULL DEFAULT 0
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## route_runs
+  id: varchar(36) NOT NULL PRIMARY KEY
+  day: varchar(20) NOT NULL
+  snapshot: jsonb NOT NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## routes
+  id: varchar(36) NOT NULL PRIMARY KEY
+  name: varchar(255) NOT NULL
+  color: varchar(7) NULL
+  stop_ids: jsonb NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## schedules
+  id: varchar(36) NOT NULL PRIMARY KEY
+  client_id: varchar(36) NOT NULL
+  monday: bool NULL DEFAULT true
+  tuesday: bool NULL DEFAULT true
+  wednesday: bool NULL DEFAULT true
+  thursday: bool NULL DEFAULT true
+  friday: bool NULL DEFAULT true
+  saturday: bool NULL DEFAULT true
+  sunday: bool NULL DEFAULT true
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## settings
+  id: varchar(36) NOT NULL PRIMARY KEY
+  key: varchar(255) NOT NULL
+  value: text NOT NULL
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## signatures
+  id: varchar(36) NOT NULL PRIMARY KEY
+  client_id: varchar(36) NOT NULL
+  order_id: varchar(36) NULL
+  slot: int4(32,0) NOT NULL
+  strokes: jsonb NOT NULL
+  signed_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ip: varchar(90) NULL
+  user_agent: varchar(1000) NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## stops
+  id: varchar(36) NOT NULL PRIMARY KEY
+  day: varchar(40) NOT NULL
+  delivery_date: date NULL
+  client_id: varchar(36) NULL
+  order_id: varchar(36) NULL
+  order: int4(32,0) NULL
+  name: varchar(510) NOT NULL
+  address: varchar(1000) NOT NULL
+  apt: varchar(100) NULL
+  city: varchar(200) NOT NULL
+  state: varchar(4) NOT NULL
+  zip: varchar(20) NOT NULL
+  phone: varchar(40) NULL
+  dislikes: text NULL
+  lat: float8(53) NOT NULL
+  lng: float8(53) NULL
+  completed: bool NULL DEFAULT false
+  proof_url: varchar(1000) NULL
+  assigned_driver_id: varchar(36) NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## upcoming_order_box_selections
+  id: varchar(36) NOT NULL PRIMARY KEY
+  upcoming_order_id: varchar(36) NOT NULL
+  vendor_id: varchar(36) NOT NULL
+  box_type_id: varchar(36) NULL
+  quantity: int4(32,0) NOT NULL DEFAULT 1
+  items: jsonb NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## upcoming_order_items
+  id: varchar(36) NOT NULL PRIMARY KEY
+  upcoming_order_id: varchar(36) NOT NULL
+  vendor_selection_id: varchar(36) NULL
+  upcoming_vendor_selection_id: varchar(36) NULL
+  menu_item_id: varchar(36) NULL
+  quantity: int4(32,0) NOT NULL DEFAULT 1
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  custom_name: text NULL
+  custom_price: numeric(10,2) NULL
+  meal_item_id: varchar(36) NULL
+  notes: text NULL
+## upcoming_order_vendor_selections
+  id: varchar(36) NOT NULL PRIMARY KEY
+  upcoming_order_id: varchar(36) NOT NULL
+  vendor_id: varchar(36) NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+## upcoming_orders
+  id: varchar(36) NOT NULL PRIMARY KEY
+  client_id: varchar(36) NOT NULL
+  service_type: varchar(50) NOT NULL
+  case_id: varchar(255) NULL
+  status: varchar(50) NOT NULL DEFAULT 'scheduled'::character varying
+  scheduled_delivery_date: date NULL
+  take_effect_date: date NULL
+  delivery_day: varchar(50) NULL
+  delivery_distribution: jsonb NULL
+  total_value: numeric(10,2) NULL
+  total_items: int4(32,0) NULL
+  notes: text NULL
+  order_number: int4(32,0) NULL
+  processed_order_id: varchar(36) NULL
+  processed_at: timestamp NULL
+  last_updated: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_by: varchar(255) NULL
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  meal_type: text NULL DEFAULT 'Lunch'::text
+  vendor_id: varchar(36) NULL
+  bill_amount: numeric(10,2) NULL
+## vendors
+  id: varchar(36) NOT NULL PRIMARY KEY
+  name: varchar(255) NOT NULL
+  email: varchar(255) NULL
+  password: varchar(255) NULL
+  service_type: varchar(255) NULL
+  delivery_days: jsonb NULL
+  delivery_frequency: varchar(50) NULL DEFAULT 'Once'::character varying
+  is_active: bool NULL DEFAULT true
+  minimum_meals: int4(32,0) NULL DEFAULT 0
+  cutoff_hours: int4(32,0) NULL DEFAULT 0
+  created_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at: timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  is_default: bool NULL DEFAULT false
+
+# Indexes (non-PK)
+admins: admins_username_key
+  CREATE UNIQUE INDEX admins_username_key ON public.admins USING btree (username)
+billing_records: idx_billing_records_client_id
+  CREATE INDEX idx_billing_records_client_id ON public.billing_records USING btree (client_id)
+billing_records: idx_billing_records_order_id
+  CREATE INDEX idx_billing_records_order_id ON public.billing_records USING btree (order_id)
+box_quotas: idx_box_quotas_box_type_id
+  CREATE INDEX idx_box_quotas_box_type_id ON public.box_quotas USING btree (box_type_id)
+box_quotas: idx_box_quotas_category_id
+  CREATE INDEX idx_box_quotas_category_id ON public.box_quotas USING btree (category_id)
+box_types: idx_box_types_vendor_id
+  CREATE INDEX idx_box_types_vendor_id ON public.box_types USING btree (vendor_id)
+breakfast_categories: idx_breakfast_categories_meal_type
+  CREATE INDEX idx_breakfast_categories_meal_type ON public.breakfast_categories USING btree (meal_type)
+breakfast_items: breakfast_items_category_id_idx
+  CREATE INDEX breakfast_items_category_id_idx ON public.breakfast_items USING btree (category_id)
+city_colors: city_colors_city_key
+  CREATE UNIQUE INDEX city_colors_city_key ON public.city_colors USING btree (city)
+clients: clients_sign_token_key
+  CREATE UNIQUE INDEX clients_sign_token_key ON public.clients USING btree (sign_token)
+clients: idx_clients_assigned_driver_id
+  CREATE INDEX idx_clients_assigned_driver_id ON public.clients USING btree (assigned_driver_id)
+clients: idx_clients_case_id_external
+  CREATE INDEX idx_clients_case_id_external ON public.clients USING btree (case_id_external)
+clients: idx_clients_client_id_external
+  CREATE INDEX idx_clients_client_id_external ON public.clients USING btree (client_id_external)
+clients: idx_clients_navigator_id
+  CREATE INDEX idx_clients_navigator_id ON public.clients USING btree (navigator_id)
+clients: idx_clients_parent_client_id
+  CREATE INDEX idx_clients_parent_client_id ON public.clients USING btree (parent_client_id)
+clients: idx_clients_sign_token
+  CREATE INDEX idx_clients_sign_token ON public.clients USING btree (sign_token)
+clients: idx_clients_status_id
+  CREATE INDEX idx_clients_status_id ON public.clients USING btree (status_id)
+delivery_history: idx_delivery_history_client_id
+  CREATE INDEX idx_delivery_history_client_id ON public.delivery_history USING btree (client_id)
+delivery_history: idx_delivery_history_vendor_id
+  CREATE INDEX idx_delivery_history_vendor_id ON public.delivery_history USING btree (vendor_id)
+driver_route_order: idx_driver_route_order_client
+  CREATE INDEX idx_driver_route_order_client ON public.driver_route_order USING btree (client_id)
+driver_route_order: idx_driver_route_order_driver_position
+  CREATE INDEX idx_driver_route_order_driver_position ON public.driver_route_order USING btree (driver_id, "position")
+drivers: idx_drivers_day
+  CREATE INDEX idx_drivers_day ON public.drivers USING btree (day)
+drivers: idx_drivers_name
+  CREATE INDEX idx_drivers_name ON public.drivers USING btree (name)
+equipment: idx_equipment_vendor_id
+  CREATE INDEX idx_equipment_vendor_id ON public.equipment USING btree (vendor_id)
+filled_forms: idx_filled_forms_form_id
+  CREATE INDEX idx_filled_forms_form_id ON public.filled_forms USING btree (form_id)
+form_answers: idx_form_answers_filled_form_id
+  CREATE INDEX idx_form_answers_filled_form_id ON public.form_answers USING btree (filled_form_id)
+form_answers: idx_form_answers_question_id
+  CREATE INDEX idx_form_answers_question_id ON public.form_answers USING btree (question_id)
+form_submissions: form_submissions_token_key
+  CREATE UNIQUE INDEX form_submissions_token_key ON public.form_submissions USING btree (token)
+form_submissions: idx_form_submissions_client_id
+  CREATE INDEX idx_form_submissions_client_id ON public.form_submissions USING btree (client_id)
+form_submissions: idx_form_submissions_form_id
+  CREATE INDEX idx_form_submissions_form_id ON public.form_submissions USING btree (form_id)
+form_submissions: idx_form_submissions_token
+  CREATE INDEX idx_form_submissions_token ON public.form_submissions USING btree (token)
+item_categories: idx_item_categories_meal_type
+  CREATE INDEX idx_item_categories_meal_type ON public.item_categories USING btree (meal_type)
+meal_planner_custom_items: idx_meal_planner_custom_items_calendar_date
+  CREATE INDEX idx_meal_planner_custom_items_calendar_date ON public.meal_planner_custom_items USING btree (calendar_date)
+meal_planner_custom_items: idx_meal_planner_custom_items_client_date
+  CREATE INDEX idx_meal_planner_custom_items_client_date ON public.meal_planner_custom_items USING btree (client_id, calendar_date)
+meal_planner_custom_items: idx_meal_planner_custom_items_client_id
+  CREATE INDEX idx_meal_planner_custom_items_client_id ON public.meal_planner_custom_items USING btree (client_id)
+meal_planner_date_config: idx_meal_planner_date_config_calendar_date
+  CREATE INDEX idx_meal_planner_date_config_calendar_date ON public.meal_planner_date_config USING btree (calendar_date)
+meal_planner_date_config: idx_meal_planner_date_config_client_date
+  CREATE INDEX idx_meal_planner_date_config_client_date ON public.meal_planner_date_config USING btree (client_id, calendar_date)
+meal_planner_date_config: meal_planner_date_config_date_client_key
+  CREATE UNIQUE INDEX meal_planner_date_config_date_client_key ON public.meal_planner_date_config USING btree (calendar_date, client_id) WHERE (client_id IS NOT NULL)
+meal_planner_date_config: meal_planner_date_config_date_default_key
+  CREATE UNIQUE INDEX meal_planner_date_config_date_default_key ON public.meal_planner_date_config USING btree (calendar_date) WHERE (client_id IS NULL)
+meal_planner_order_items: idx_meal_planner_order_items_meal_item_id
+  CREATE INDEX idx_meal_planner_order_items_meal_item_id ON public.meal_planner_order_items USING btree (meal_item_id)
+meal_planner_order_items: idx_meal_planner_order_items_meal_type
+  CREATE INDEX idx_meal_planner_order_items_meal_type ON public.meal_planner_order_items USING btree (meal_type)
+meal_planner_order_items: idx_meal_planner_order_items_menu_item_id
+  CREATE INDEX idx_meal_planner_order_items_menu_item_id ON public.meal_planner_order_items USING btree (menu_item_id)
+meal_planner_order_items: idx_meal_planner_order_items_order_id
+  CREATE INDEX idx_meal_planner_order_items_order_id ON public.meal_planner_order_items USING btree (meal_planner_order_id)
+meal_planner_orders: idx_meal_planner_orders_case_id
+  CREATE INDEX idx_meal_planner_orders_case_id ON public.meal_planner_orders USING btree (case_id)
+meal_planner_orders: idx_meal_planner_orders_client_id
+  CREATE INDEX idx_meal_planner_orders_client_id ON public.meal_planner_orders USING btree (client_id)
+meal_planner_orders: idx_meal_planner_orders_processed_order_id
+  CREATE INDEX idx_meal_planner_orders_processed_order_id ON public.meal_planner_orders USING btree (processed_order_id)
+meal_planner_orders: idx_meal_planner_orders_scheduled_delivery_date
+  CREATE INDEX idx_meal_planner_orders_scheduled_delivery_date ON public.meal_planner_orders USING btree (scheduled_delivery_date)
+meal_planner_orders: idx_meal_planner_orders_status
+  CREATE INDEX idx_meal_planner_orders_status ON public.meal_planner_orders USING btree (status)
+menu_items: idx_menu_items_category_id
+  CREATE INDEX idx_menu_items_category_id ON public.menu_items USING btree (category_id)
+menu_items: idx_menu_items_vendor_id
+  CREATE INDEX idx_menu_items_vendor_id ON public.menu_items USING btree (vendor_id)
+navigator_logs: idx_navigator_logs_client_id
+  CREATE INDEX idx_navigator_logs_client_id ON public.navigator_logs USING btree (client_id)
+navigator_logs: idx_navigator_logs_navigator_id
+  CREATE INDEX idx_navigator_logs_navigator_id ON public.navigator_logs USING btree (navigator_id)
+order_box_selections: idx_order_box_selections_box_type_id
+  CREATE INDEX idx_order_box_selections_box_type_id ON public.order_box_selections USING btree (box_type_id)
+order_box_selections: idx_order_box_selections_order_id
+  CREATE INDEX idx_order_box_selections_order_id ON public.order_box_selections USING btree (order_id)
+order_box_selections: idx_order_box_selections_vendor_id
+  CREATE INDEX idx_order_box_selections_vendor_id ON public.order_box_selections USING btree (vendor_id)
+order_history: idx_order_history_client_id
+  CREATE INDEX idx_order_history_client_id ON public.order_history USING btree (client_id)
+order_items: idx_order_items_menu_item_id
+  CREATE INDEX idx_order_items_menu_item_id ON public.order_items USING btree (menu_item_id)
+order_items: idx_order_items_vendor_selection_id
+  CREATE INDEX idx_order_items_vendor_selection_id ON public.order_items USING btree (vendor_selection_id)
+order_vendor_selections: idx_order_vendor_selections_order_id
+  CREATE INDEX idx_order_vendor_selections_order_id ON public.order_vendor_selections USING btree (order_id)
+order_vendor_selections: idx_order_vendor_selections_vendor_id
+  CREATE INDEX idx_order_vendor_selections_vendor_id ON public.order_vendor_selections USING btree (vendor_id)
+orders: idx_orders_client_id
+  CREATE INDEX idx_orders_client_id ON public.orders USING btree (client_id)
+orders: idx_orders_order_number
+  CREATE INDEX idx_orders_order_number ON public.orders USING btree (order_number)
+orders: idx_orders_scheduled_delivery_date
+  CREATE INDEX idx_orders_scheduled_delivery_date ON public.orders USING btree (scheduled_delivery_date)
+orders: idx_orders_status
+  CREATE INDEX idx_orders_status ON public.orders USING btree (status)
+orders: idx_orders_vendor_id
+  CREATE INDEX idx_orders_vendor_id ON public.orders USING btree (vendor_id)
+orders: orders_order_number_key
+  CREATE UNIQUE INDEX orders_order_number_key ON public.orders USING btree (order_number)
+passwordless_codes: idx_passwordless_codes_email
+  CREATE INDEX idx_passwordless_codes_email ON public.passwordless_codes USING btree (email)
+questions: idx_questions_form_id
+  CREATE INDEX idx_questions_form_id ON public.questions USING btree (form_id)
+route_runs: idx_route_runs_created_at
+  CREATE INDEX idx_route_runs_created_at ON public.route_runs USING btree (created_at)
+route_runs: idx_route_runs_day
+  CREATE INDEX idx_route_runs_day ON public.route_runs USING btree (day)
+routes: idx_routes_name
+  CREATE INDEX idx_routes_name ON public.routes USING btree (name)
+schedules: idx_schedules_client_id
+  CREATE INDEX idx_schedules_client_id ON public.schedules USING btree (client_id)
+schedules: schedules_client_id_key
+  CREATE UNIQUE INDEX schedules_client_id_key ON public.schedules USING btree (client_id)
+settings: idx_settings_key
+  CREATE INDEX idx_settings_key ON public.settings USING btree (key)
+settings: settings_key_key
+  CREATE UNIQUE INDEX settings_key_key ON public.settings USING btree (key)
+signatures: idx_signatures_client_id
+  CREATE INDEX idx_signatures_client_id ON public.signatures USING btree (client_id)
+signatures: idx_signatures_order_id
+  CREATE INDEX idx_signatures_order_id ON public.signatures USING btree (order_id)
+signatures: idx_signatures_signed_at
+  CREATE INDEX idx_signatures_signed_at ON public.signatures USING btree (signed_at)
+signatures: signatures_client_id_slot_key
+  CREATE UNIQUE INDEX signatures_client_id_slot_key ON public.signatures USING btree (client_id, slot)
+stops: idx_stops_client_id
+  CREATE INDEX idx_stops_client_id ON public.stops USING btree (client_id)
+stops: idx_stops_completed
+  CREATE INDEX idx_stops_completed ON public.stops USING btree (completed)
+stops: idx_stops_day
+  CREATE INDEX idx_stops_day ON public.stops USING btree (day)
+stops: idx_stops_delivery_date
+  CREATE INDEX idx_stops_delivery_date ON public.stops USING btree (delivery_date)
+stops: idx_stops_order_id
+  CREATE INDEX idx_stops_order_id ON public.stops USING btree (order_id)
+stops: stops_order_id_key
+  CREATE UNIQUE INDEX stops_order_id_key ON public.stops USING btree (order_id)
+stops: stops_order_id_key1
+  CREATE UNIQUE INDEX stops_order_id_key1 ON public.stops USING btree (order_id)
+upcoming_order_box_selections: idx_upcoming_order_box_selections_box_type_id
+  CREATE INDEX idx_upcoming_order_box_selections_box_type_id ON public.upcoming_order_box_selections USING btree (box_type_id)
+upcoming_order_box_selections: idx_upcoming_order_box_selections_upcoming_order_id
+  CREATE INDEX idx_upcoming_order_box_selections_upcoming_order_id ON public.upcoming_order_box_selections USING btree (upcoming_order_id)
+upcoming_order_box_selections: idx_upcoming_order_box_selections_vendor_id
+  CREATE INDEX idx_upcoming_order_box_selections_vendor_id ON public.upcoming_order_box_selections USING btree (vendor_id)
+upcoming_order_items: idx_upcoming_order_items_menu_item_id
+  CREATE INDEX idx_upcoming_order_items_menu_item_id ON public.upcoming_order_items USING btree (menu_item_id)
+upcoming_order_items: idx_upcoming_order_items_upcoming_order_id
+  CREATE INDEX idx_upcoming_order_items_upcoming_order_id ON public.upcoming_order_items USING btree (upcoming_order_id)
+upcoming_order_items: idx_upcoming_order_items_upcoming_vendor_selection_id
+  CREATE INDEX idx_upcoming_order_items_upcoming_vendor_selection_id ON public.upcoming_order_items USING btree (upcoming_vendor_selection_id)
+upcoming_order_items: idx_upcoming_order_items_vendor_selection_id
+  CREATE INDEX idx_upcoming_order_items_vendor_selection_id ON public.upcoming_order_items USING btree (vendor_selection_id)
+upcoming_order_vendor_selections: idx_upcoming_order_vendor_selections_upcoming_order_id
+  CREATE INDEX idx_upcoming_order_vendor_selections_upcoming_order_id ON public.upcoming_order_vendor_selections USING btree (upcoming_order_id)
+upcoming_order_vendor_selections: idx_upcoming_order_vendor_selections_vendor_id
+  CREATE INDEX idx_upcoming_order_vendor_selections_vendor_id ON public.upcoming_order_vendor_selections USING btree (vendor_id)
+upcoming_orders: idx_upcoming_orders_client_id
+  CREATE INDEX idx_upcoming_orders_client_id ON public.upcoming_orders USING btree (client_id)
+upcoming_orders: idx_upcoming_orders_order_number
+  CREATE INDEX idx_upcoming_orders_order_number ON public.upcoming_orders USING btree (order_number)
+upcoming_orders: idx_upcoming_orders_processed_order_id
+  CREATE INDEX idx_upcoming_orders_processed_order_id ON public.upcoming_orders USING btree (processed_order_id)
+upcoming_orders: idx_upcoming_orders_status
+  CREATE INDEX idx_upcoming_orders_status ON public.upcoming_orders USING btree (status)
+upcoming_orders: idx_upcoming_orders_vendor_id
+  CREATE INDEX idx_upcoming_orders_vendor_id ON public.upcoming_orders USING btree (vendor_id)

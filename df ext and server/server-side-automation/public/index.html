@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DF Billing Automation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>DF Billing Automation</h1>
+            <div id="connection-status" class="badge">Connecting...</div>
+        </header>
+
+        <div id="slots-strip" class="slots-strip" aria-label="Active browser slots"></div>
+
+        <section class="controls">
+            <label for="bill-date" class="bill-date-label">First date:</label>
+            <input type="date" id="bill-date" class="bill-date-input" title="Used as start date when downloading from server">
+            <button id="btn-download-bill" onclick="downloadAllClients()"
+                style="background: #059669; margin-right: 10px;">📋 Download fromserver</button>
+            <button id="btn-run-queue" onclick="runCurrentQueue()"
+                style="background: #7c3aed;">▶ Run current queue</button>
+
+            <div class="stats">
+                <span>Total: <b id="stat-total">0</b></span>
+                <span>Waiting: <b id="stat-pending">0</b></span>
+                <span>Completed: <b id="stat-success">0</b></span>
+                <span>Failed: <b id="stat-failed">0</b></span>
+            </div>
+        </section>
+
+        <div class="main-grid">
+            <section class="queue-panel">
+                <h2>Request Queue</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="col-check" title="Select clients to run">
+                                    <input type="checkbox" id="queue-select-all" title="Select all">
+                                </th>
+                                <th onclick="sortQueue('id')"># ↕</th>
+                                <th onclick="sortQueue('name')">Client ↕</th>
+                                <th onclick="sortQueue('start')">Dates ↕</th>
+                                <th onclick="sortQueue('status')">Status ↕</th>
+                                <th onclick="sortQueue('message')">Message ↕</th>
+                            </tr>
+                        </thead>
+                        <tbody id="queue-body">
+                            <!-- Items will be injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="log-panel">
+                <h2>Live Activity</h2>
+                <div id="terminal" class="terminal">
+                    <div class="line dimmed">Waiting for logs...</div>
+                </div>
+            </section>
+        </div>
+    </div>
+    <script src="client.js"></script>
+</body>
+
+</html>
