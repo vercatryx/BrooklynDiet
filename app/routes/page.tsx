@@ -267,34 +267,39 @@ export default function RoutesPage() {
 
 
     // Single lightweight load for Client Assignment: clients + driver map (DB-side filter). No /api/users, no full routes.
-    // Fetch clients-missing-geocode independently so the Manual Geocoding button shows even when assignment-data fails (e.g. missing column in DB).
     React.useEffect(() => {
         (async () => {
             setAssignmentDataLoading(true);
-            const loadMissingGeocode = async () => {
+            try {
+                const res = await fetch(`/api/route/assignment-data?day=${selectedDay}`, { cache: "no-store" });
+                if (!res.ok) throw new Error("Failed to load assignment data");
+                const data = await res.json();
+                setAssignmentData({ clients: data.clients || [], drivers: data.drivers || [], stats: data.stats ?? null });
+                // Load ungeocoded list from clients table so count is correct
                 const missingRes = await fetch("/api/route/clients-missing-geocode", { cache: "no-store" });
                 if (missingRes.ok) {
                     const missingData = await missingRes.json();
                     const list = missingData.clients || [];
                     setMissingBatch(list);
+                    // DEBUG: what we got from API (browser console)
+                    console.log("[RoutesPage] clients-missing-geocode response count:", list.length);
                     if (list.length > 0) {
-                        console.log("[RoutesPage] clients-missing-geocode response count:", list.length);
+                        const first = list[0];
+                        console.log("[RoutesPage] first item keys:", Object.keys(first));
+                        console.log("[RoutesPage] first item address fields:", {
+                            address: first?.address,
+                            city: first?.city,
+                            state: first?.state,
+                            zip: first?.zip,
+                        });
                     }
                 } else {
                     setMissingBatch([]);
                 }
-            };
-            try {
-                const [res, _] = await Promise.all([
-                    fetch(`/api/route/assignment-data?day=${selectedDay}`, { cache: "no-store" }),
-                    loadMissingGeocode(),
-                ]);
-                if (!res.ok) throw new Error("Failed to load assignment data");
-                const data = await res.json();
-                setAssignmentData({ clients: data.clients || [], drivers: data.drivers || [], stats: data.stats ?? null });
             } catch (e) {
                 console.error("Failed to load assignment data", e);
                 setAssignmentData({ clients: [], drivers: [], stats: null });
+                setMissingBatch([]);
             } finally {
                 setAssignmentDataLoading(false);
             }

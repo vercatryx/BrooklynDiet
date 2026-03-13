@@ -4,8 +4,9 @@
 import "dotenv/config";
 import dotenv from "dotenv";
 import path from "path";
-// Load .env from project root (brooklyn clone) so migrate deploy uses this project's DATABASE_URL
-dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+
+// Load .env.local so Prisma uses the same single source as Next.js (no duplicate .env)
+dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 import { defineConfig, env } from "prisma/config";
 
 // Helper function to convert pooler URL to direct connection URL

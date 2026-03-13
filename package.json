@@ -3,8 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
-    "dev:turbo": "next dev",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -26,10 +25,7 @@
     "fix-order-items-remove-item-and-doubles": "npx ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' scripts/fix-order-items-remove-item-and-doubles.ts",
     "test-telnyx-sms": "npx ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' scripts/test-telnyx-sms.ts",
     "dump-db-schema": "npx ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' scripts/dump-db-schema.ts",
-    "seed": "node scripts/seed-brooklyn-defaults.js",
-    "seed:produce": "node scripts/seed-brooklyn-produce-clients.js",
-    "fix:produce-service-type": "node scripts/fix-produce-service-type.js",
-    "import-schema": "node scripts/import-schema-from-parent.js"
+    "copy-admins-to-brooklyn": "npx ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' scripts/copy-admins-to-brooklyn-db.ts"
 },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.958.0",

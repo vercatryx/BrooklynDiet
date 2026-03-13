@@ -90,15 +90,15 @@
 .dateBtn:hover {
   background: var(--bg-surface-hover);
   border-color: var(--color-primary);
-  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.15);
+  box-shadow: 0 2px 8px rgba(72, 190, 133, 0.15);
   transform: translateY(-1px);
 }
 
 .dateBtn.active {
-  background: rgba(var(--color-primary-rgb), 0.14);
+  background: rgba(var(--color-primary-rgb, 72, 190, 133), 0.14);
   border-color: var(--color-primary);
   color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.25);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 72, 190, 133), 0.25);
 }
 
 .dateLabel {
@@ -150,7 +150,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-primary);
-  background: rgba(var(--color-primary-rgb), 0.12);
+  background: rgba(var(--color-primary-rgb, 72, 190, 133), 0.12);
   padding: 2px 8px;
   border-radius: 999px;
   margin-left: 0.25rem;
@@ -404,6 +404,18 @@
 
 .emptyState p {
   margin: 0;
+}
+
+/* Inline message when calendar is shown but no dates in this month (below calendar, not full-page) */
+.emptyStateInline {
+  margin: var(--spacing-md) 0 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: 0.9rem;
+  color: var(--text-tertiary);
+  text-align: center;
+  max-width: 36em;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* Loading state: calendar skeleton with days loading animation */
@@ -696,9 +708,9 @@
 }
 
 .calendarDayToday {
-  background: rgba(var(--color-primary-rgb), 0.1);
+  background: rgba(var(--color-primary-rgb, 59, 130, 246), 0.1);
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.25);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 59, 130, 246), 0.25);
 }
 
 .calendarDayToday .calendarDayNum {
@@ -713,7 +725,7 @@
 .calendarDayToday.calendarDayHasPlan {
   background: rgba(34, 197, 94, 0.12);
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 59, 130, 246), 0.2);
 }
 
 .calendarLegend {

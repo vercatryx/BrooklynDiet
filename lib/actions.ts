@@ -3,7 +3,7 @@
 import { getCurrentTime } from './time';
 import { getTodayDateInAppTzAsReference, getTodayInAppTz, toDateStringInAppTz, toCalendarDateKeyInAppTz } from './timezone';
 import { revalidatePath } from 'next/cache';
-import { ClientStatus, Vendor, MenuItem, BoxType, AppSettings, Navigator, Nutritionist, ClientProfile, DeliveryRecord, ItemCategory, BoxQuota, ServiceType, Equipment, MealCategory, MealItem, ClientFoodOrder, ClientMealOrder, ClientBoxOrder } from './types';
+import { ClientStatus, Vendor, MenuItem, BoxType, AppSettings, Navigator, Nutritionist, ClientProfile, DeliveryRecord, ItemCategory, BoxQuota, ServiceType, Equipment, MealCategory, MealItem, ClientFoodOrder, ClientMealOrder, ClientBoxOrder, ProduceVendor } from './types';
 import { randomUUID } from 'crypto';
 import { getSession } from './session';
 import {
@@ -1625,13 +1625,17 @@ export async function convertFoodUpcomingOrderToMealPlanOrders(
     return results;
 }
 
+/** Optional date range to limit returned meal plan entries (e.g. current month only for portal). */
+export type GetClientMealPlannerDataRange = { startDate?: string; endDate?: string };
+
 /**
  * Get meal planner data from clients.meal_planner_data.
  * Returns format compatible with SavedMealPlanMonth (MealPlannerOrderResult[]).
  * When meal_planner_data is empty but client has Food data in upcoming_order, returns converted
  * day-based entries (migration) so the client sees their recurring order as per-day until they save.
+ * @param range - Optional { startDate, endDate } to return only dates in range (e.g. for portal current month).
  */
-export async function getClientMealPlannerData(clientId: string): Promise<MealPlannerOrderResult[]> {
+export async function getClientMealPlannerData(clientId: string, range?: GetClientMealPlannerDataRange | null): Promise<MealPlannerOrderResult[]> {
     if (!clientId) return [];
     try {
         const { data, error } = await supabase
@@ -1643,11 +1647,16 @@ export async function getClientMealPlannerData(clientId: string): Promise<MealPl
         const raw = data.meal_planner_data;
         const upcomingOrder = data.upcoming_order;
         const today = getTodayInAppTz();
+        const start = range?.startDate ? mealPlannerDateOnly(range.startDate) : null;
+        const end = range?.endDate ? mealPlannerDateOnly(range.endDate) : null;
         if (raw && Array.isArray(raw) && raw.length > 0) {
-            return (raw as any[])
+            const result = (raw as any[])
                 .filter((entry: any) => {
                     const d = entry?.scheduledDeliveryDate ?? entry?.scheduled_delivery_date ?? '';
-                    return d >= today;
+                    if (d < today) return false;
+                    if (start != null && d < start) return false;
+                    if (end != null && d > end) return false;
+                    return true;
                 })
                 .map((entry: any) => {
                     const dateStr = mealPlannerDateOnly(entry?.scheduledDeliveryDate ?? entry?.scheduled_delivery_date ?? '');
@@ -1668,10 +1677,20 @@ export async function getClientMealPlannerData(clientId: string): Promise<MealPl
                     };
                 })
                 .sort((a, b) => a.scheduledDeliveryDate.localeCompare(b.scheduledDeliveryDate));
+            return result;
         }
         const order = typeof upcomingOrder === 'string' ? (() => { try { return JSON.parse(upcomingOrder); } catch { return null; } })() : upcomingOrder;
         if (order && (order.serviceType === 'Food' || order.service_type === 'Food')) {
-            return convertFoodUpcomingOrderToMealPlanOrders(order, today, 28);
+            const converted = await convertFoodUpcomingOrderToMealPlanOrders(order, today, 28);
+            if (start != null || end != null) {
+                return converted.filter((o) => {
+                    const d = o.scheduledDeliveryDate || '';
+                    if (start != null && d < start) return false;
+                    if (end != null && d > end) return false;
+                    return true;
+                });
+            }
+            return converted;
         }
         return [];
     } catch (e) {
@@ -1869,6 +1888,66 @@ export async function getMealPlannerCustomItems(
     } catch (error) {
         console.error('Error fetching meal planner custom items:', error);
         return { items: [], expirationDate: null, expectedTotalMeals: null };
+    }
+}
+
+/**
+ * Fetch default template (client_id IS NULL) meal planner items and config for multiple dates in 2 queries.
+ * Used by getAvailableMealPlanTemplateInRange to avoid N round-trips per month.
+ */
+async function getMealPlannerCustomItemsBatch(dates: string[]): Promise<Map<string, GetMealPlannerCustomItemsResult>> {
+    const result = new Map<string, GetMealPlannerCustomItemsResult>();
+    if (!dates.length) return result;
+    const uniqueDates = [...new Set(dates.map((d) => mealPlannerDateOnly(d)))].filter(Boolean);
+    if (uniqueDates.length === 0) return result;
+    try {
+        const { data: rows, error } = await supabase
+            .from('meal_planner_custom_items')
+            .select('calendar_date, id, name, quantity, value, sort_order, expiration_date')
+            .is('client_id', null)
+            .in('calendar_date', uniqueDates)
+            .order('calendar_date', { ascending: true })
+            .order('sort_order', { ascending: true });
+        if (error) {
+            logQueryError(error, 'meal_planner_custom_items', 'select');
+            return result;
+        }
+        const { data: configRows } = await supabase
+            .from('meal_planner_date_config')
+            .select('calendar_date, expected_total_meals')
+            .is('client_id', null)
+            .in('calendar_date', uniqueDates);
+        const expectedByDate = new Map<string, number | null>();
+        for (const r of configRows || []) {
+            const d = mealPlannerDateOnly((r as any).calendar_date);
+            if (d && (r as any).expected_total_meals != null) {
+                const v = Number((r as any).expected_total_meals);
+                if (!Number.isNaN(v)) expectedByDate.set(d, v);
+            }
+        }
+        for (const d of uniqueDates) {
+            result.set(d, { items: [], expirationDate: null, expectedTotalMeals: expectedByDate.get(d) ?? null });
+        }
+        for (const row of rows || []) {
+            const d = mealPlannerDateOnly((row as any).calendar_date);
+            if (!d) continue;
+            const entry = result.get(d)!;
+            const exp = (row as any).expiration_date;
+            if (exp != null && entry.expirationDate == null) {
+                entry.expirationDate = typeof exp === 'string' ? exp.slice(0, 10) : String(exp).slice(0, 10);
+            }
+            entry.items.push({
+                id: (row as any).id,
+                name: (row as any).name,
+                quantity: (row as any).quantity != null && !Number.isNaN(Number((row as any).quantity)) ? Math.max(0, Number((row as any).quantity)) : 0,
+                value: (row as any).value != null && !Number.isNaN(Number((row as any).value)) ? Number((row as any).value) : null,
+                sortOrder: (row as any).sort_order ?? 0
+            });
+        }
+        return result;
+    } catch (err) {
+        console.error('Error in getMealPlannerCustomItemsBatch:', err);
+        return result;
     }
 }
 
@@ -2131,6 +2210,133 @@ export async function getSavedMealPlanDatesWithItemsFromOrders(
     }
 }
 
+/** One client's meal plan edit for a given delivery date (for meal plan edits report). */
+export type MealPlanEditEntry = {
+    clientId: string;
+    clientName: string;
+    scheduledDeliveryDate: string;
+    items: { id: string; name: string; quantity: number; value: number | null }[];
+};
+
+/**
+ * Get all clients who changed their meal plan from the default for a given delivery date.
+ * Sources from clients.meal_planner_data — same as getClientsWhoChangedFromDefaultForDate
+ * (vendor cooking list) — but returns full items so the Meal Plan Edits page can show them.
+ */
+export async function getMealPlanEditsByDeliveryDate(deliveryDate: string): Promise<MealPlanEditEntry[]> {
+    const dateOnly = mealPlannerDateOnly(deliveryDate);
+    if (!dateOnly) return [];
+    try {
+        const supabaseClient = process.env.SUPABASE_SERVICE_ROLE_KEY
+            ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+            : supabase;
+
+        const { data: clients, error } = await supabaseClient
+            .from('clients')
+            .select('id, full_name, meal_planner_data')
+            .not('meal_planner_data', 'is', null);
+
+        if (error) {
+            logQueryError(error, 'clients', 'select');
+            return [];
+        }
+        if (!clients || clients.length === 0) return [];
+
+        const result: MealPlanEditEntry[] = [];
+        for (const c of clients) {
+            const mpd = c.meal_planner_data;
+            if (!Array.isArray(mpd)) continue;
+            const entry = mpd.find(
+                (e: any) => (e?.scheduledDeliveryDate ?? e?.scheduled_delivery_date) === dateOnly
+            );
+            if (!entry) continue;
+            const items = Array.isArray(entry.items)
+                ? entry.items.map((i: any, idx: number) => ({
+                    id: i.id ?? `item-${idx}`,
+                    name: (i.name ?? 'Item').trim(),
+                    quantity: Math.max(0, Number(i.quantity) ?? 0),
+                    value: i.value != null && !Number.isNaN(Number(i.value)) ? Number(i.value) : null
+                }))
+                : [];
+            result.push({
+                clientId: c.id,
+                clientName: (c.full_name ?? 'Unknown').trim() || 'Unknown',
+                scheduledDeliveryDate: dateOnly,
+                items
+            });
+        }
+        return result.sort((a, b) => a.clientName.localeCompare(b.clientName));
+    } catch (error) {
+        console.error('Error fetching meal plan edits by delivery date:', error);
+        return [];
+    }
+}
+
+/**
+ * Get count of distinct clients who changed from default per delivery date in the given range.
+ * Sources from clients.meal_planner_data (same as vendor cooking list).
+ * Uses DB function get_meal_plan_edit_counts when available (faster); falls back to JS scan.
+ */
+export async function getMealPlanEditCountsByMonth(startDate: string, endDate: string): Promise<Record<string, number>> {
+    const start = mealPlannerDateOnly(startDate);
+    const end = mealPlannerDateOnly(endDate);
+    try {
+        const supabaseClient = process.env.SUPABASE_SERVICE_ROLE_KEY
+            ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+            : supabase;
+
+        const { data: rpcRows, error: rpcError } = await supabaseClient.rpc('get_meal_plan_edit_counts', {
+            p_start_date: start,
+            p_end_date: end
+        });
+
+        if (!rpcError && rpcRows && Array.isArray(rpcRows)) {
+            const result: Record<string, number> = {};
+            for (const row of rpcRows as { delivery_date: string; client_count: number }[]) {
+                const dateKey = row.delivery_date ? mealPlannerDateOnly(String(row.delivery_date)) : null;
+                if (dateKey) result[dateKey] = Number(row.client_count) || 0;
+            }
+            return result;
+        }
+
+        if (rpcError) {
+            console.warn('[getMealPlanEditCountsByMonth] RPC not available, using fallback:', rpcError.message);
+        }
+
+        // Fallback: scan clients.meal_planner_data in JS
+        const { data: clients, error } = await supabaseClient
+            .from('clients')
+            .select('id, meal_planner_data')
+            .not('meal_planner_data', 'is', null);
+
+        if (error) {
+            logQueryError(error, 'clients', 'select');
+            return {};
+        }
+        if (!clients || clients.length === 0) return {};
+
+        const byDate = new Map<string, Set<string>>();
+        for (const c of clients) {
+            const mpd = c.meal_planner_data;
+            if (!Array.isArray(mpd)) continue;
+            for (const entry of mpd) {
+                const dateKey = mealPlannerDateOnly(entry?.scheduledDeliveryDate ?? entry?.scheduled_delivery_date ?? '');
+                if (!dateKey || dateKey < start || dateKey > end) continue;
+                if (!byDate.has(dateKey)) byDate.set(dateKey, new Set());
+                byDate.get(dateKey)!.add(c.id);
+            }
+        }
+        const result: Record<string, number> = {};
+        for (const [dateKey, clientSet] of byDate) {
+            result[dateKey] = clientSet.size;
+        }
+        return result;
+    } catch (err) {
+        console.error('Error fetching meal plan edit counts:', err);
+        return {};
+    }
+}
+
 /**
  * Get distinct calendar dates from meal_planner_custom_items for the default template (client_id is null)
  * that are today or in the future. Used to seed meal_planner_orders for a client when they have none.
@@ -2172,8 +2378,9 @@ export async function getDefaultTemplateMealPlanDatesForFuture(): Promise<string
 /**
  * Get default template calendar dates in an optional date range. Used to lazy-create
  * meal_planner_orders for a client when they view their meal plan and the template has dates they don't have yet.
+ * Exported for portal month-scoped loading.
  */
-async function getDefaultTemplateMealPlanDatesInRange(
+export async function getDefaultTemplateMealPlanDatesInRange(
     startDate?: string | null,
     endDate?: string | null
 ): Promise<string[]> {
@@ -2435,24 +2642,34 @@ export async function getCombinedMenuItemsForDate(
     // Day-specific items: default (client_id IS NULL) and/or client overrides (client_id = clientId)
     const { items: defaultDayItems } = await getMealPlannerCustomItems(dateOnly, null);
     for (const dayIt of defaultDayItems) {
-        if (combined.some((c) => nameEq(c, dayIt))) continue;
-        combined.push({
+        const existingIdx = combined.findIndex((c) => nameEq(c, dayIt));
+        const dayEntry = {
             id: dayIt.id,
             name: dayIt.name ?? 'Item',
             quantity: Math.max(0, Number(dayIt.quantity) ?? 0),
             value: dayIt.value != null && !Number.isNaN(Number(dayIt.value)) ? Number(dayIt.value) : null
-        });
+        };
+        if (existingIdx >= 0) {
+            combined[existingIdx] = dayEntry;
+        } else {
+            combined.push(dayEntry);
+        }
     }
     if (clientId != null && clientId !== '') {
         const { items: clientDayItems } = await getMealPlannerCustomItems(dateOnly, clientId);
         for (const dayIt of clientDayItems) {
-            if (combined.some((c) => nameEq(c, dayIt))) continue;
-            combined.push({
+            const existingIdx = combined.findIndex((c) => nameEq(c, dayIt));
+            const dayEntry = {
                 id: dayIt.id,
                 name: dayIt.name ?? 'Item',
                 quantity: Math.max(0, Number(dayIt.quantity) ?? 0),
                 value: dayIt.value != null && !Number.isNaN(Number(dayIt.value)) ? Number(dayIt.value) : null
-            });
+            };
+            if (existingIdx >= 0) {
+                combined[existingIdx] = dayEntry;
+            } else {
+                combined.push(dayEntry);
+            }
         }
     }
     console.log('[MealPlan Step 3] getCombinedMenuItemsForDate: final combined count=', combined.length);
@@ -2511,6 +2728,128 @@ export async function getAvailableMealPlanTemplateWithAllDatesIncludingRecurring
         console.error('Error fetching combined meal plan template with all dates:', err);
         return [];
     }
+}
+
+/**
+ * Month-scoped template: same as getAvailableMealPlanTemplateWithAllDatesIncludingRecurring but only for
+ * dates in [startDate, endDate]. Uses one recurring fetch + batch custom items (2 queries) instead of N per date.
+ * Use for client portal to load current month only and when user changes month.
+ */
+export async function getAvailableMealPlanTemplateInRange(startDate: string, endDate: string): Promise<MealPlannerOrderResult[]> {
+    const start = mealPlannerDateOnly(startDate);
+    const end = mealPlannerDateOnly(endDate);
+    if (!start || !end || start > end) return [];
+    try {
+        let dates = await getDefaultTemplateMealPlanDatesInRange(start, end);
+        const today = getTodayInAppTz();
+        if (dates.length === 0) {
+            const [y, m, d] = today.split('-').map(Number);
+            const first = new Date(y, m - 1, d);
+            const monthStart = new Date(first.getFullYear(), first.getMonth(), 1);
+            const monthEnd = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+            const fallback: string[] = [];
+            for (let t = monthStart.getTime(); t <= monthEnd.getTime(); t += 86400000) {
+                const date = new Date(t);
+                const ds = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+                if (ds >= today) fallback.push(ds);
+            }
+            dates = fallback;
+            if (dates.length === 0) return [];
+        }
+        const [recurringItems, batchResult] = await Promise.all([
+            getRecurringItemsFromFoodTemplate().then((r) => (r.length > 0 ? r : getFullFoodMenuAsRecurringFallback())),
+            getMealPlannerCustomItemsBatch(dates)
+        ]);
+        const nameEq = (a: { name?: string | null }, b: { name?: string | null }) =>
+            ((a.name ?? '').trim() || 'Item').toLowerCase() === ((b.name ?? '').trim() || 'Item').toLowerCase();
+        const list: MealPlannerOrderResult[] = [];
+        for (const dateOnly of dates) {
+            if (dateOnly < today) continue;
+            const custom = batchResult.get(dateOnly);
+            const defaultDayItems = custom?.items ?? [];
+            const combined: MealPlannerOrderDisplayItem[] = recurringItems.map((r) => ({
+                id: r.id,
+                name: r.name ?? 'Item',
+                quantity: r.quantity ?? 0,
+                value: r.value != null && !Number.isNaN(Number(r.value)) ? Number(r.value) : null
+            }));
+            for (const dayIt of defaultDayItems) {
+                const existingIdx = combined.findIndex((c) => nameEq(c, dayIt));
+                const dayEntry: MealPlannerOrderDisplayItem = {
+                    id: dayIt.id,
+                    name: dayIt.name ?? 'Item',
+                    quantity: Math.max(0, Number(dayIt.quantity) ?? 0),
+                    value: dayIt.value != null && !Number.isNaN(Number(dayIt.value)) ? Number(dayIt.value) : null
+                };
+                if (existingIdx >= 0) combined[existingIdx] = dayEntry;
+                else combined.push(dayEntry);
+            }
+            const expirationDate = custom?.expirationDate ?? null;
+            if (expirationDate != null && expirationDate !== '' && expirationDate < today) continue;
+            const expectedTotalMeals = custom?.expectedTotalMeals != null && !Number.isNaN(Number(custom.expectedTotalMeals)) ? Number(custom.expectedTotalMeals) : null;
+            list.push({
+                id: `template-${dateOnly}`,
+                scheduledDeliveryDate: dateOnly,
+                deliveryDay: null,
+                status: 'draft',
+                totalItems: combined.length,
+                items: combined,
+                expirationDate,
+                expectedTotalMeals
+            });
+        }
+        return list;
+    } catch (err) {
+        console.error('Error fetching meal plan template in range:', err);
+        return [];
+    }
+}
+
+/**
+ * Load merged meal plan (template + client overrides) for a single month. Used by client portal
+ * to show current month only; when user changes month, call again with that year/month.
+ * One batch template fetch + one client range fetch + merge in memory.
+ */
+export async function getMealPlanForMonth(clientId: string, year: number, month: number): Promise<MealPlannerOrderResult[]> {
+    const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const [templateList, clientList] = await Promise.all([
+        getAvailableMealPlanTemplateInRange(monthStart, monthEnd),
+        getClientMealPlannerData(clientId, { startDate: monthStart, endDate: monthEnd })
+    ]);
+    const byDate = new Map<string, MealPlannerOrderResult>();
+    for (const o of templateList) {
+        if (o.scheduledDeliveryDate) byDate.set(o.scheduledDeliveryDate, o);
+    }
+    const nameEq = (a: { name?: string | null }, b: { name?: string | null }) =>
+        ((a.name ?? '').trim() || 'Item').toLowerCase() === ((b.name ?? '').trim() || 'Item').toLowerCase();
+    for (const o of clientList) {
+        if (!o.scheduledDeliveryDate) continue;
+        const templateOrder = byDate.get(o.scheduledDeliveryDate);
+        if (!templateOrder) {
+            byDate.set(o.scheduledDeliveryDate, o);
+            continue;
+        }
+        const clientByKey = new Map(o.items.map((i) => [(i.name ?? '').trim().toLowerCase(), i]));
+        const mergedItems = templateOrder.items.map((tItem) => {
+            const key = (tItem.name ?? '').trim().toLowerCase() || 'item';
+            const clientItem = clientByKey.get(key);
+            if (clientItem) {
+                return {
+                    ...tItem,
+                    id: String(tItem.id || '').startsWith('recurring-') && !String(clientItem.id || '').startsWith('recurring-') ? clientItem.id : tItem.id,
+                    quantity: clientItem.quantity
+                };
+            }
+            return tItem;
+        });
+        byDate.set(o.scheduledDeliveryDate, {
+            ...templateOrder,
+            items: mergedItems
+        });
+    }
+    return Array.from(byDate.values()).sort((a, b) => (a.scheduledDeliveryDate || '').localeCompare(b.scheduledDeliveryDate || ''));
 }
 
 /**
@@ -3748,6 +4087,7 @@ function mapClientFromDB(c: any): ClientProfile {
         visits: visits,
         signToken: c.sign_token || null,
         assignedDriverId: c.assigned_driver_id || null,
+        produceVendorId: c.produce_vendor_id || null,
         mealPlannerData: c.meal_planner_data ?? null,
         createdAt: c.created_at,
         updatedAt: c.updated_at
@@ -3968,7 +4308,8 @@ export async function addClient(data: Omit<ClientProfile, 'id' | 'createdAt' | '
         geocoded_at: data.geocodedAt || null,
         billings: data.billings ? JSON.stringify(data.billings) : null,
         visits: data.visits ? JSON.stringify(data.visits) : null,
-        sign_token: data.signToken || null
+        sign_token: data.signToken || null,
+        produce_vendor_id: (data.serviceType === 'Produce' && data.produceVendorId) ? data.produceVendorId : null
     };
 
     // Save upcoming_order if provided; sanitize to schema-only shape (UPCOMING_ORDER_SCHEMA)
@@ -4031,7 +4372,8 @@ export async function addClient(data: Omit<ClientProfile, 'id' | 'createdAt' | '
         geocoded_at: payload.geocoded_at,
         billings: payload.billings,
         visits: payload.visits,
-        sign_token: payload.sign_token
+        sign_token: payload.sign_token,
+        produce_vendor_id: payload.produce_vendor_id
     };
     
     const { data: res, error: insertError } = await supabase
@@ -4061,7 +4403,7 @@ export async function addClient(data: Omit<ClientProfile, 'id' | 'createdAt' | '
     return newClient;
 }
 
-export async function addDependent(name: string, parentClientId: string, dob?: string | null, cin?: number | null, serviceType: ServiceType = 'Food') {
+export async function addDependent(name: string, parentClientId: string, dob?: string | null, cin?: number | null, serviceType: ServiceType = 'Food', produceVendorId?: string | null) {
     if (!name.trim() || !parentClientId) {
         throw new Error('Dependent name and parent client are required');
     }
@@ -4140,7 +4482,8 @@ export async function addDependent(name: string, parentClientId: string, dob?: s
         dislikes: payload.dislikes,
         lat: payload.lat,
         lng: payload.lng,
-        geocoded_at: payload.geocoded_at
+        geocoded_at: payload.geocoded_at,
+        produce_vendor_id: (serviceType === 'Produce' && produceVendorId) ? produceVendorId : null
     };
     const { data: res, error: insertError } = await supabase
         .from('clients')
@@ -4269,6 +4612,7 @@ export async function updateClient(id: string, data: Partial<ClientProfile>, opt
     if (data.billings !== undefined) payload.billings = data.billings ? JSON.stringify(data.billings) : null;
     if (data.visits !== undefined) payload.visits = data.visits ? JSON.stringify(data.visits) : null;
     if (data.signToken !== undefined) payload.sign_token = data.signToken || null;
+    if (data.produceVendorId !== undefined) payload.produce_vendor_id = data.produceVendorId || null;
 
     payload.updated_at = new Date().toISOString();
 
@@ -4654,7 +4998,10 @@ export async function recordClientChange(clientId: string, summary: string, who?
     }
 }
 
-export async function getOrderHistory(clientId: string, caseId?: string | null) {
+/** Optional pre-fetched reference data to avoid duplicate round-trips when batching portal data */
+export type OrderReferenceData = { menuItems: MenuItem[]; vendors: Vendor[]; boxTypes: BoxType[] };
+
+export async function getOrderHistory(clientId: string, caseId?: string | null, referenceData?: OrderReferenceData | null) {
     if (!clientId) return [];
 
     try {
@@ -4675,12 +5022,10 @@ export async function getOrderHistory(clientId: string, caseId?: string | null) 
 
         if (!data || data.length === 0) return [];
 
-        // Fetch reference data once
-        const [menuItems, vendors, boxTypes] = await Promise.all([
-            getMenuItems(),
-            getVendors(),
-            getBoxTypes()
-        ]);
+        // Use pre-fetched reference data when provided (e.g. from getClientPortalPageData) to avoid duplicate round-trips
+        const [menuItems, vendors, boxTypes] = referenceData
+            ? [referenceData.menuItems, referenceData.vendors, referenceData.boxTypes]
+            : await Promise.all([getMenuItems(), getVendors(), getBoxTypes()]);
 
         const orders = await Promise.all(
             data.map(async (orderData: any) => {
@@ -7827,8 +8172,9 @@ export async function processUpcomingOrders() {
  * This is used for "Recent Orders" display
  * Returns orders with scheduled_delivery_date in the current week, or orders created/updated this week
  * Now uses local database for fast access
+ * @param referenceData - Optional pre-fetched menuItems, vendors, boxTypes to avoid duplicate round-trips when batching (e.g. getClientPortalPageData)
  */
-export async function getActiveOrderForClient(clientId: string) {
+export async function getActiveOrderForClient(clientId: string, referenceData?: OrderReferenceData | null) {
     if (!clientId) return null;
 
     try {
@@ -7916,10 +8262,10 @@ export async function getActiveOrderForClient(clientId: string) {
         // If multiple orders, return them grouped by delivery day or as an array
         const isMultipleOrders = ordersData.length > 1;
 
-        // Fetch related data
-        const menuItems = await getMenuItems();
-        const vendors = await getVendors();
-        const boxTypes = await getBoxTypes();
+        // Use pre-fetched reference data when provided to avoid duplicate round-trips
+        const [menuItems, vendors, boxTypes] = referenceData
+            ? [referenceData.menuItems, referenceData.vendors, referenceData.boxTypes]
+            : await Promise.all([getMenuItems(), getVendors(), getBoxTypes()]);
 
         // Process all orders
         const processOrder = async (orderData: any) => {
@@ -9012,6 +9358,74 @@ export async function getClientProfilePageData(clientId: string) {
         };
     } catch (error) {
         console.error('[getClientProfilePageData] Error:', error);
+        return null;
+    }
+}
+
+/**
+ * Single batched load for the client portal page. Fetches client, reference data once,
+ * then client-specific data (active order, order history, meal plan, dependants) with
+ * shared reference data to avoid duplicate getMenuItems/getVendors/getBoxTypes round-trips.
+ * Use this instead of many separate calls to speed up /client-portal/[id].
+ */
+export async function getClientPortalPageData(clientId: string) {
+    if (!clientId) return null;
+    try {
+        const client = await getClient(clientId);
+        if (!client) return null;
+
+        const parentId = client.parentClientId ?? client.id;
+
+        // 1) Reference data + household in one parallel batch
+        const [
+            statuses,
+            navigators,
+            vendors,
+            menuItems,
+            boxTypes,
+            categories,
+            dependants,
+            parent
+        ] = await Promise.all([
+            getStatuses(),
+            getNavigators(),
+            getVendors(),
+            getMenuItems(),
+            getBoxTypes(),
+            getCategories(),
+            getDependentsByParentId(parentId),
+            parentId === client.id ? Promise.resolve(client) : getClient(parentId)
+        ]);
+
+        const refData: OrderReferenceData = { menuItems, vendors, boxTypes };
+        const householdPeople = parent ? [parent, ...dependants] : [client, ...dependants];
+
+        // 2) Client-specific data reusing reference data (no duplicate menu/vendor/box fetches)
+        // Food: load current month only for fast calendar (getMealPlanForMonth); other months load on demand in SavedMealPlanMonth
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+        const [activeOrder, previousOrders, mealPlanData] = await Promise.all([
+            getActiveOrderForClient(clientId, refData),
+            getOrderHistory(clientId, undefined, refData),
+            client.serviceType === 'Food' ? getMealPlanForMonth(clientId, currentYear, currentMonth) : Promise.resolve([])
+        ]);
+
+        return {
+            client,
+            householdPeople,
+            statuses: statuses ?? [],
+            navigators: navigators ?? [],
+            vendors: vendors ?? [],
+            menuItems: menuItems ?? [],
+            boxTypes: boxTypes ?? [],
+            categories: categories ?? [],
+            activeOrder: activeOrder ?? null,
+            previousOrders: previousOrders ?? [],
+            mealPlanData: Array.isArray(mealPlanData) ? mealPlanData : []
+        };
+    } catch (error) {
+        console.error('[getClientPortalPageData] Error:', error);
         return null;
     }
 }
@@ -12002,4 +12416,83 @@ export async function saveClientCustomOrder(clientId: string, vendorId: string, 
 
     revalidatePath(`/clients/${clientId}`);
     return { success: true };
+}
+
+// --- PRODUCE VENDOR ACTIONS ---
+
+export async function getProduceVendors(): Promise<ProduceVendor[]> {
+    try {
+        const { data, error } = await supabase
+            .from('produce_vendors')
+            .select('*')
+            .order('name', { ascending: true });
+        if (error) {
+            console.error('[getProduceVendors] Error:', error);
+            return [];
+        }
+        return (data || []).map((pv: any) => ({
+            id: pv.id,
+            name: pv.name,
+            token: pv.token,
+            isActive: pv.is_active,
+            createdAt: pv.created_at,
+        }));
+    } catch (err) {
+        console.error('[getProduceVendors] Error:', err);
+        return [];
+    }
+}
+
+export async function createProduceVendor(name: string): Promise<ProduceVendor> {
+    const { data, error } = await supabase
+        .from('produce_vendors')
+        .insert({ name: name.trim() })
+        .select()
+        .single();
+    if (error || !data) {
+        throw new Error('Failed to create produce vendor: ' + (error?.message || 'no data'));
+    }
+    revalidatePath('/admin');
+    return {
+        id: data.id,
+        name: data.name,
+        token: data.token,
+        isActive: data.is_active,
+        createdAt: data.created_at,
+    };
+}
+
+export async function updateProduceVendor(id: string, updates: { name?: string; isActive?: boolean }): Promise<ProduceVendor> {
+    const payload: any = {};
+    if (updates.name !== undefined) payload.name = updates.name.trim();
+    if (updates.isActive !== undefined) payload.is_active = updates.isActive;
+
+    const { data, error } = await supabase
+        .from('produce_vendors')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error || !data) {
+        throw new Error('Failed to update produce vendor: ' + (error?.message || 'no data'));
+    }
+    revalidatePath('/admin');
+    return {
+        id: data.id,
+        name: data.name,
+        token: data.token,
+        isActive: data.is_active,
+        createdAt: data.created_at,
+    };
+}
+
+export async function deleteProduceVendor(id: string): Promise<void> {
+    const { error } = await supabase
+        .from('produce_vendors')
+        .update({ is_active: false })
+        .eq('id', id);
+    if (error) {
+        throw new Error('Failed to deactivate produce vendor: ' + error.message);
+    }
+    revalidatePath('/admin');
 }

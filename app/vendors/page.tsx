@@ -11,7 +11,6 @@ export default async function VendorsPage() {
     if (defaultVendorId) {
         redirect(`/vendors/${defaultVendorId}`);
     }
-    // Fallback for empty DB (e.g. parent app single-vendor ID)
+    // Fallback for empty DB (e.g. same single-vendor ID as parent)
     redirect(`/vendors/cccccccc-cccc-cccc-cccc-cccccccccccc`);
 }
-

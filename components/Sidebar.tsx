@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
-import { Users, ChevronLeft, ChevronRight, LogOut, Download, History, Settings, Route, Package } from 'lucide-react';
+import { Users, ChevronLeft, ChevronRight, LogOut, Download, History, Settings, Route, Package, CalendarCheck } from 'lucide-react';
 import styles from './Sidebar.module.css';
 import { logout } from '@/lib/auth-actions';
 import { useState, useEffect, useCallback } from 'react';
@@ -15,6 +15,7 @@ const navItems = [
     { label: 'Downloads', href: '/vendors', icon: Download },
     { label: 'Produce', href: '/vendors/produce', icon: Package },
     { label: 'Routes', href: '/routes', icon: Route },
+    { label: 'Meal Plan Edits', href: '/meal-plan-edits', icon: CalendarCheck },
     { label: 'Admin Control', href: '/admin', icon: Settings },
 ];
 
@@ -144,6 +145,9 @@ export function Sidebar({
                         return userRole === 'admin' || userRole === 'super-admin';
                     }
                     if (item.label === 'Produce') {
+                        return userRole === 'admin' || userRole === 'super-admin';
+                    }
+                    if (item.label === 'Meal Plan Edits') {
                         return userRole === 'admin' || userRole === 'super-admin';
                     }
                     if ((item as any).role) {

@@ -13,52 +13,23 @@ export async function GET(req: Request) {
         const day = (searchParams.get("day") || "all").toLowerCase();
 
         // 1) Clients: only columns needed for assignment, filter paused/delivery in DB
-        // If DB is missing assigned_driver_id (e.g. Brooklyn clone before migration), retry without it
-        const clientColumnsWithDriver =
-            "id, first_name, last_name, full_name, address, apt, city, state, zip, phone_number, lat, lng, paused, delivery, assigned_driver_id, parent_client_id, service_type";
-        const clientColumnsNoDriver =
-            "id, first_name, last_name, full_name, address, apt, city, state, zip, phone_number, lat, lng, paused, delivery, parent_client_id, service_type";
-
-        let clientsRows: any[] | null = null;
-        let clientsError: any = null;
-
-        const clientsQuery1 = supabase
+        const clientsQuery = supabase
             .from("clients")
-            .select(clientColumnsWithDriver)
+            .select(
+                "id, first_name, last_name, full_name, address, apt, city, state, zip, phone_number, lat, lng, paused, delivery, assigned_driver_id, parent_client_id, service_type"
+            )
             .eq("paused", false)
             .or("delivery.is.null,delivery.eq.true")
             .order("id", { ascending: true });
-        const result1 = await clientsQuery1;
-        clientsRows = result1.data;
-        clientsError = result1.error;
+
+        const { data: clientsRows, error: clientsError } = await clientsQuery;
 
         if (clientsError) {
-            const msg = clientsError.message || "";
-            const missingColumn = /column.*does not exist|assigned_driver_id/i.test(msg);
-            if (missingColumn) {
-                const clientsQuery2 = supabase
-                    .from("clients")
-                    .select(clientColumnsNoDriver)
-                    .eq("paused", false)
-                    .or("delivery.is.null,delivery.eq.true")
-                    .order("id", { ascending: true });
-                const result2 = await clientsQuery2;
-                if (result2.error) {
-                    console.error("[/api/route/assignment-data] clients error (fallback):", result2.error);
-                    return NextResponse.json(
-                        { error: result2.error.message },
-                        { status: 500 }
-                    );
-                }
-                clientsRows = result2.data;
-                clientsError = null;
-            } else {
-                console.error("[/api/route/assignment-data] clients error:", clientsError);
-                return NextResponse.json(
-                    { error: clientsError.message },
-                    { status: 500 }
-                );
-            }
+            console.error("[/api/route/assignment-data] clients error:", clientsError);
+            return NextResponse.json(
+                { error: clientsError.message },
+                { status: 500 }
+            );
         }
 
         // 1b) Client stats (all clients, no filter) for routes page summary
@@ -105,33 +76,29 @@ export async function GET(req: Request) {
             }
             return "";
         };
-        const clients = (clientsRows || []).map((c: any) => {
-            const latVal = c.lat != null ? Number(c.lat) : (c.latitude != null ? Number(c.latitude) : null);
-            const lngVal = c.lng != null ? Number(c.lng) : (c.longitude != null ? Number(c.longitude) : null);
-            return {
-                id: c.id,
-                first: pick(c, "first_name", "firstName"),
-                last: pick(c, "last_name", "lastName"),
-                name: pick(c, "full_name", "fullName"),
-                full_name: pick(c, "full_name", "fullName"),
-                address: pick(c, "address", "Address"),
-                apt: c.apt != null && c.apt !== "" ? String(c.apt) : null,
-                city: pick(c, "city", "City"),
-                state: pick(c, "state", "State"),
-                zip: pick(c, "zip", "Zip", "zip_code", "postal_code"),
-                phone: c.phone_number != null && c.phone_number !== "" ? String(c.phone_number) : null,
-                lat: latVal,
-                lng: lngVal,
-                paused: Boolean(c.paused),
-                delivery: c.delivery !== undefined ? Boolean(c.delivery) : true,
-                assigned_driver_id: c.assigned_driver_id ?? null,
-                assignedDriverId: c.assigned_driver_id ?? null,
-                parent_client_id: c.parent_client_id != null && c.parent_client_id !== "" ? String(c.parent_client_id) : null,
-                parentClientId: c.parent_client_id != null && c.parent_client_id !== "" ? String(c.parent_client_id) : null,
-                service_type: c.service_type != null && c.service_type !== "" ? String(c.service_type) : null,
-                serviceType: c.service_type != null && c.service_type !== "" ? String(c.service_type) : null,
-            };
-        });
+        const clients = (clientsRows || []).map((c: any) => ({
+            id: c.id,
+            first: pick(c, "first_name", "firstName"),
+            last: pick(c, "last_name", "lastName"),
+            name: pick(c, "full_name", "fullName"),
+            full_name: pick(c, "full_name", "fullName"),
+            address: pick(c, "address", "Address"),
+            apt: c.apt != null && c.apt !== "" ? String(c.apt) : null,
+            city: pick(c, "city", "City"),
+            state: pick(c, "state", "State"),
+            zip: pick(c, "zip", "Zip", "zip_code", "postal_code"),
+            phone: c.phone_number != null && c.phone_number !== "" ? String(c.phone_number) : null,
+            lat: c.lat != null ? Number(c.lat) : null,
+            lng: c.lng != null ? Number(c.lng) : null,
+            paused: Boolean(c.paused),
+            delivery: c.delivery !== undefined ? Boolean(c.delivery) : true,
+            assigned_driver_id: c.assigned_driver_id ?? null,
+            assignedDriverId: c.assigned_driver_id ?? null,
+            parent_client_id: c.parent_client_id != null && c.parent_client_id !== "" ? String(c.parent_client_id) : null,
+            parentClientId: c.parent_client_id != null && c.parent_client_id !== "" ? String(c.parent_client_id) : null,
+            service_type: c.service_type != null && c.service_type !== "" ? String(c.service_type) : null,
+            serviceType: c.service_type != null && c.service_type !== "" ? String(c.service_type) : null,
+        }));
 
         // 2) Drivers: id + name + color from drivers and routes tables (DB-side)
         let driversQuery = supabase

@@ -29,10 +29,10 @@ const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 export const metadata: Metadata = {
   title: {
-    default: 'Client Food Service Admin',
-    template: '%s | Client Food Service Admin',
+    default: 'Brooklyn — Client Food Service Admin',
+    template: '%s | Brooklyn',
   },
-  description: 'Admin portal for managing client food services.',
+  description: 'Brooklyn — Admin portal for managing client food services.',
   icons: {
     icon: '/diet-fantasy-logo.png',
     apple: '/diet-fantasy-logo.png',

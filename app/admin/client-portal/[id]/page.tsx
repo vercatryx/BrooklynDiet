@@ -15,13 +15,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `${client.fullName} – Portal` };
 }
 
-export default async function ClientPortalPage({ params }: Props) {
+export default async function AdminClientPortalPage({ params }: Props) {
   const { id } = await params;
 
-  // Clients may only view their own portal — redirect to their page if they try another
+  // Admin-only: only admin and super-admin may view this page
   const session = await getSession();
-  if (session?.role === 'client' && session.userId !== id) {
-    redirect(`/client-portal/${session.userId}`);
+  if (session?.role !== 'admin' && session?.role !== 'super-admin') {
+    redirect('/clients');
   }
 
   const payload = await getClientPortalPageData(id);

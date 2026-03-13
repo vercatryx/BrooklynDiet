@@ -358,7 +358,7 @@
     justify-content: space-between;
     gap: var(--spacing-lg);
     padding: var(--spacing-xl) var(--spacing-xl) var(--spacing-lg);
-    background: linear-gradient(180deg, rgba(var(--color-primary-rgb), 0.06) 0%, transparent 100%);
+    background: linear-gradient(180deg, rgba(72, 190, 133, 0.06) 0%, transparent 100%);
     border-bottom: 1px solid var(--border-color-light);
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 }
@@ -379,7 +379,7 @@
     font-size: 0.875rem;
     font-weight: 600;
     color: var(--color-primary);
-    background: rgba(var(--color-primary-rgb), 0.12);
+    background: rgba(72, 190, 133, 0.12);
     border-radius: var(--radius-md);
     letter-spacing: 0.01em;
 }
@@ -553,7 +553,7 @@
 }
 .mealPlannerDragHandle:hover {
     color: var(--color-primary);
-    background: rgba(var(--color-primary-rgb), 0.12);
+    background: rgba(72, 190, 133, 0.12);
 }
 .mealPlannerDragHandleHeader {
     display: inline-block;
