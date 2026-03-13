@@ -69,6 +69,8 @@ export interface SavedMealPlanMonthProps {
   householdSize?: number;
   /** When true, only load one month at a time (portal). initialOrders = current month; when user changes month, fetch that month. Avoids loading all future dates. */
   loadByMonth?: boolean;
+  /** When true, show all dates including past and expired (admin override). */
+  adminMode?: boolean;
 }
 
 function applyOrders(orders: MealPlannerOrderResult[], setOrders: (o: MealPlannerOrderResult[]) => void) {
@@ -87,7 +89,7 @@ function scaleTemplateQuantities(list: MealPlannerOrderResult[], multiplier: num
   }));
 }
 
-export function SavedMealPlanMonth({ clientId, onOrdersChange, onEditedDatesChange, initialOrders, preloadInProgress, autoSave = true, editedDatesResetTrigger, includeRecurringInTemplate = false, householdSize = 1, loadByMonth = false }: SavedMealPlanMonthProps) {
+export function SavedMealPlanMonth({ clientId, onOrdersChange, onEditedDatesChange, initialOrders, preloadInProgress, autoSave = true, editedDatesResetTrigger, includeRecurringInTemplate = false, householdSize = 1, loadByMonth = false, adminMode = false }: SavedMealPlanMonthProps) {
   const [orders, setOrders] = useState<MealPlannerOrderResult[]>([]);
   const [loadingDates, setLoadingDates] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -240,7 +242,7 @@ export function SavedMealPlanMonth({ clientId, onOrdersChange, onEditedDatesChan
       setLoadingDates(true);
       const thisFetchId = fetchIdRef.current + 1;
       fetchIdRef.current = thisFetchId;
-      getMealPlanForMonth(effectiveClientId, now.getFullYear(), now.getMonth() + 1)
+      getMealPlanForMonth(effectiveClientId, now.getFullYear(), now.getMonth() + 1, adminMode ? { includePastAndExpired: true } : undefined)
         .then((list) => {
           if (fetchIdRef.current !== thisFetchId) return;
           clientEditedDatesRef.current = new Set(list.map((o) => o.scheduledDeliveryDate).filter(Boolean));
@@ -286,15 +288,18 @@ export function SavedMealPlanMonth({ clientId, onOrdersChange, onEditedDatesChan
 
   const todayIso = useMemo(() => getTodayIso(), []);
 
-  // Only show dates that are today or future and not expired (expirationDate >= today when set)
+  // Only show dates that are today or future and not expired (expirationDate >= today when set).
+  // In adminMode, show ALL dates including past and expired.
   const futureOrders = useMemo(
     () =>
-      orders.filter(
-        (o) =>
-          (o.scheduledDeliveryDate || '') >= todayIso &&
-          (o.expirationDate == null || o.expirationDate === '' || o.expirationDate >= todayIso)
-      ),
-    [orders, todayIso]
+      adminMode
+        ? orders
+        : orders.filter(
+            (o) =>
+              (o.scheduledDeliveryDate || '') >= todayIso &&
+              (o.expirationDate == null || o.expirationDate === '' || o.expirationDate >= todayIso)
+          ),
+    [orders, todayIso, adminMode]
   );
 
   const validDateSet = useMemo(() => new Set(futureOrders.map((o) => o.scheduledDeliveryDate).filter(Boolean)), [futureOrders]);
@@ -324,7 +329,7 @@ export function SavedMealPlanMonth({ clientId, onOrdersChange, onEditedDatesChan
     setLoadingDates(true);
     const thisFetchId = fetchIdRef.current + 1;
     fetchIdRef.current = thisFetchId;
-    getMealPlanForMonth(effectiveClientId, y, m)
+    getMealPlanForMonth(effectiveClientId, y, m, adminMode ? { includePastAndExpired: true } : undefined)
       .then((list) => {
         if (fetchIdRef.current !== thisFetchId) return;
         clientEditedDatesRef.current = new Set(list.map((o) => o.scheduledDeliveryDate).filter(Boolean));
@@ -338,7 +343,7 @@ export function SavedMealPlanMonth({ clientId, onOrdersChange, onEditedDatesChan
       .finally(() => {
         if (fetchIdRef.current === thisFetchId) setLoadingDates(false);
       });
-  }, [loadByMonth, effectiveClientId, calendarMonth]);
+  }, [loadByMonth, effectiveClientId, calendarMonth, adminMode]);
 
   const calendarDays = useMemo(() => {
     const year = calendarMonth.getFullYear();
