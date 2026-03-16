@@ -1,62 +1,50 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+let _client: SupabaseClient | null = null;
 
-// Debug logging for environment variables
-if (process.env.NODE_ENV !== 'production') {
-    console.log('[supabase] Environment check:');
-    console.log(`  NEXT_PUBLIC_SUPABASE_URL: ${supabaseUrl ? '✅ Set' : '❌ Missing'}`);
-    console.log(`  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${supabaseAnonKey ? '✅ Set' : '❌ Missing'}`);
-    console.log(`  SUPABASE_SERVICE_ROLE_KEY: ${supabaseServiceKey ? '✅ Set' : '⚠️  Missing (will use anon key)'}`);
-    
-    if (supabaseUrl) {
-        console.log(`  Supabase URL: ${supabaseUrl.substring(0, 30)}...`);
+/** Create Supabase client on first use so build (no env) does not throw. */
+function getClient(): SupabaseClient {
+    if (_client) return _client;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseKey = supabaseServiceKey || supabaseAnonKey;
+
+    if (process.env.NODE_ENV !== 'production') {
+        console.log('[supabase] Environment check:');
+        console.log(`  NEXT_PUBLIC_SUPABASE_URL: ${supabaseUrl ? '✅ Set' : '❌ Missing'}`);
+        console.log(`  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${supabaseAnonKey ? '✅ Set' : '❌ Missing'}`);
+        console.log(`  SUPABASE_SERVICE_ROLE_KEY: ${supabaseServiceKey ? '✅ Set' : '⚠️  Missing (will use anon key)'}`);
+        if (supabaseUrl) console.log(`  Supabase URL: ${supabaseUrl.substring(0, 30)}...`);
     }
-}
 
-// Prioritize service role key for server-side operations to bypass RLS
-// If service role key is not available, fall back to anon key (may fail if RLS is enabled)
-const supabaseKey = supabaseServiceKey || supabaseAnonKey;
-
-if (!supabaseUrl || !supabaseKey) {
-    const missing = [];
-    if (!supabaseUrl) missing.push('NEXT_PUBLIC_SUPABASE_URL');
-    if (!supabaseAnonKey) missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-    if (!supabaseServiceKey && !supabaseAnonKey) missing.push('SUPABASE_SERVICE_ROLE_KEY (or ANON_KEY)');
-    console.error('[supabase] ❌ Missing environment variables:', missing.join(', '));
-    throw new Error(`Missing Supabase environment variables: ${missing.join(', ')}`);
-}
-
-// Log warning if service role key is not set (RLS may block queries)
-if (!supabaseServiceKey && process.env.NODE_ENV !== 'production') {
-    console.warn('[supabase] ⚠️  SUPABASE_SERVICE_ROLE_KEY not set. Using anon key. Queries may fail if RLS is enabled.');
-    console.warn('[supabase] 💡 To fix: Add SUPABASE_SERVICE_ROLE_KEY to your .env.local file');
-}
-
-// Extract hostname for validation
-let hostname: string | null = null;
-try {
-    const url = new URL(supabaseUrl);
-    hostname = url.hostname;
-} catch (error) {
-    console.error('[supabase] ❌ Invalid Supabase URL format:', supabaseUrl);
-}
-
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-    auth: {
-        autoRefreshToken: false,
-        persistSession: false
-    },
-    db: {
-        schema: 'public'
-    },
-    global: {
-        headers: {
-            'x-client-info': 'dietcombo-app'
-        }
+    if (!supabaseUrl || !supabaseKey) {
+        const missing = [];
+        if (!supabaseUrl) missing.push('NEXT_PUBLIC_SUPABASE_URL');
+        if (!supabaseAnonKey) missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+        if (!supabaseServiceKey && !supabaseAnonKey) missing.push('SUPABASE_SERVICE_ROLE_KEY (or ANON_KEY)');
+        console.error('[supabase] ❌ Missing environment variables:', missing.join(', '));
+        throw new Error(`Missing Supabase environment variables: ${missing.join(', ')}`);
     }
+
+    if (!supabaseServiceKey && process.env.NODE_ENV !== 'production') {
+        console.warn('[supabase] ⚠️  SUPABASE_SERVICE_ROLE_KEY not set. Using anon key. Queries may fail if RLS is enabled.');
+        console.warn('[supabase] 💡 To fix: Add SUPABASE_SERVICE_ROLE_KEY to your .env.local file');
+    }
+
+    _client = createClient(supabaseUrl, supabaseKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+        db: { schema: 'public' },
+        global: { headers: { 'x-client-info': 'dietcombo-app' } },
+    });
+    return _client;
+}
+
+/** Lazy proxy so existing `import { supabase }` works and build does not require env. */
+export const supabase = new Proxy({} as SupabaseClient, {
+    get(_, prop) {
+        return (getClient() as any)[prop];
+    },
 });
 
 // Helper function to check for DNS/connection errors
